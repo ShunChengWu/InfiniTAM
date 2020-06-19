@@ -18,6 +18,8 @@
 #include "../../ITMLib/Core/ITMBasicSurfelEngine.h"
 #include "../../ITMLib/Core/ITMMultiEngine.h"
 
+#include <ImageLoader/ImageLoadFactory.h>
+
 using namespace InfiniTAM::Engine;
 using namespace InputSource;
 using namespace ITMLib;
@@ -153,43 +155,23 @@ static void CreateDefaultImageSource(ImageSourceEngine* & imageSource, IMUSource
 int main(int argc, char** argv)
 try
 {
-	const char *arg1 = "";
-	const char *arg2 = NULL;
-	const char *arg3 = NULL;
-	const char *arg4 = NULL;
+    auto type = SCSLAM::IO::InputDateType::INPUTDATATYPE::INPUTTYPE_TUM;
+    auto folder = "/media/sc/space1/dataset/TUMRGBD/rgbd_dataset_freiburg1_360/";
+    auto camK = "/media/sc/space1/dataset/TUMRGBD/calib_fre1.txt";
+    auto gt = "/media/sc/space1/dataset/TUMRGBD/rgbd_dataset_freiburg1_360/groundtruth.txt";
+    auto frame_to_skip = 2;
+    SCSLAM::IO::ImageLoader *imageLoader = SCSLAM::ImageLoaderFactory::MakeImageLoader(type,folder,camK, gt);
+    imageLoader->Init();
 
-	int arg = 1;
-	do {
-		if (argv[arg] != NULL) arg1 = argv[arg]; else break;
-		++arg;
-		if (argv[arg] != NULL) arg2 = argv[arg]; else break;
-		++arg;
-		if (argv[arg] != NULL) arg3 = argv[arg]; else break;
-		++arg;
-		if (argv[arg] != NULL) arg4 = argv[arg]; else break;
-	} while (false);
-
-	if (arg == 1) {
-		printf("usage: %s [<calibfile> [<imagesource>] ]\n"
-		       "  <calibfile>   : path to a file containing intrinsic calibration parameters\n"
-		       "  <imagesource> : either one argument to specify OpenNI device ID\n"
-		       "                  or two arguments specifying rgb and depth file masks\n"
-		       "\n"
-		       "examples:\n"
-		       "  %s ./Files/Teddy/calib.txt ./Files/Teddy/Frames/%%04i.ppm ./Files/Teddy/Frames/%%04i.pgm\n"
-		       "  %s ./Files/Teddy/calib.txt\n\n", argv[0], argv[0], argv[0]);
-	}
+    ITMRGBDCalib itmrgbdCalib;
+    itmrgbdCalib.intrinsics_d = imageLoader->getDepthCameraParams();
+    itmrgbdCalib.intrinsics_rgb = imageLoader->getRGBCameraParams();
+    itmrgbdCalib.disparityCalib.SetFrom(imageLoader->getDepthScale(),0,ITMLib::ITMDisparityCalib::TRAFO_AFFINE);
+    printf("depth dscale: %f\n",imageLoader->getDepthScale());
 
 	printf("initialising ...\n");
-	ImageSourceEngine *imageSource = NULL;
 	IMUSourceEngine *imuSource = NULL;
 
-	CreateDefaultImageSource(imageSource, imuSource, arg1, arg2, arg3, arg4);
-	if (imageSource==NULL)
-	{
-		std::cout << "failed to open any image stream" << std::endl;
-		return -1;
-	}
 
 	ITMLibSettings *internalSettings = new ITMLibSettings();
 
@@ -197,26 +179,27 @@ try
 	switch (internalSettings->libMode)
 	{
 	case ITMLibSettings::LIBMODE_BASIC:
-		mainEngine = new ITMBasicEngine<ITMVoxel, ITMVoxelIndex>(internalSettings, imageSource->getCalib(), imageSource->getRGBImageSize(), imageSource->getDepthImageSize());
+		mainEngine = new ITMBasicEngine<ITMVoxel, ITMVoxelIndex>(internalSettings, itmrgbdCalib,itmrgbdCalib.intrinsics_rgb.imgSize, itmrgbdCalib.intrinsics_d.imgSize);
 		break;
 	case ITMLibSettings::LIBMODE_BASIC_SURFELS:
-		mainEngine = new ITMBasicSurfelEngine<ITMSurfelT>(internalSettings, imageSource->getCalib(), imageSource->getRGBImageSize(), imageSource->getDepthImageSize());
+		mainEngine = new ITMBasicSurfelEngine<ITMSurfelT>(internalSettings, itmrgbdCalib, itmrgbdCalib.intrinsics_rgb.imgSize , itmrgbdCalib.intrinsics_d.imgSize);
 		break;
 	case ITMLibSettings::LIBMODE_LOOPCLOSURE:
-		mainEngine = new ITMMultiEngine<ITMVoxel, ITMVoxelIndex>(internalSettings, imageSource->getCalib(), imageSource->getRGBImageSize(), imageSource->getDepthImageSize());
+		mainEngine = new ITMMultiEngine<ITMVoxel, ITMVoxelIndex>(internalSettings, itmrgbdCalib, itmrgbdCalib.intrinsics_rgb.imgSize , itmrgbdCalib.intrinsics_d.imgSize);
 		break;
 	default: 
 		throw std::runtime_error("Unsupported library mode!");
 		break;
 	}
 
-	UIEngine::Instance()->Initialise(argc, argv, imageSource, imuSource, mainEngine, "./Files/Out", internalSettings->deviceType);
+	UIEngine::Instance()->Initialise(argc, argv, imageLoader, imuSource, mainEngine, "./Files/Out", internalSettings->deviceType);
+	UIEngine::Instance()->skipFrmae = frame_to_skip;
 	UIEngine::Instance()->Run();
 	UIEngine::Instance()->Shutdown();
 
 	delete mainEngine;
 	delete internalSettings;
-	delete imageSource;
+	delete imageLoader;
 	if (imuSource != NULL) delete imuSource;
 	return 0;
 }

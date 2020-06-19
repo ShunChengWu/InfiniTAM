@@ -69,7 +69,8 @@ namespace ITMLib
 		virtual ITMTrackingState* GetTrackingState(void) = 0;
 
 		/// Process a frame with rgb and depth images and optionally a corresponding imu measurement
-        virtual ITMTrackingState::TrackingResult ProcessFrame(ITMUChar4Image *rgbImage, ITMShortImage *rawDepthImage, ITMIMUMeasurement *imuMeasurement = NULL) = 0;
+        virtual ITMTrackingState::TrackingResult ProcessFrame(ITMUChar4Image *rgbImage, ITMShortImage *rawDepthImage,
+                                                              ORUtils::Matrix4<float> *customPose = nullptr, ITMIMUMeasurement *imuMeasurement = NULL) = 0;
 
 		/// Get a result image as output
 		virtual Vector2i GetImageSize(void) const = 0;

@@ -21,6 +21,7 @@
 #include "../../ITMLib/Core/ITMBasicEngine.h"
 #include "../../ITMLib/Core/ITMBasicSurfelEngine.h"
 #include "../../ITMLib/Core/ITMMultiEngine.h"
+#include "../../ORUtils/Image2cvMat.h"
 
 #include "../../ORUtils/FileUtils.h"
 #include "../../InputSource/FFMPEGWriter.h"
@@ -489,7 +490,7 @@ void UIEngine::glutMouseWheelFunction(int button, int dir, int x, int y)
 	uiEngine->needsRefresh = true;
 }
 
-void UIEngine::Initialise(int & argc, char** argv, ImageSourceEngine *imageSource, IMUSourceEngine *imuSource, ITMMainEngine *mainEngine,
+void UIEngine::Initialise(int & argc, char** argv, SCSLAM::IO::ImageLoader *imageSource, IMUSourceEngine *imuSource, ITMMainEngine *mainEngine,
 	const char *outFolder, ITMLibSettings::DeviceType deviceType)
 {
 	this->freeviewActive = false;
@@ -527,8 +528,8 @@ void UIEngine::Initialise(int & argc, char** argv, ImageSourceEngine *imageSourc
 	int textHeight = 30; // Height of text area
 	//winSize.x = (int)(1.5f * (float)MAX(imageSource->getImageSize().x, imageSource->getDepthImageSize().x));
 	//winSize.y = MAX(imageSource->getRGBImageSize().y, imageSource->getDepthImageSize().y) + textHeight;
-	winSize.x = (int)(1.5f * (float)(imageSource->getDepthImageSize().x));
-	winSize.y = imageSource->getDepthImageSize().y + textHeight;
+	winSize.x = (int)(1.5f * (float)( imageSource->getDepthCameraParams().imgSize.x));
+	winSize.y = imageSource->getDepthCameraParams().imgSize.y + textHeight;
 	float h1 = textHeight / (float)winSize.y, h2 = (1.f + h1) / 2;
 	winReg[0] = Vector4f(0.0f, h1, 0.665f, 1.0f);   // Main render
 	winReg[1] = Vector4f(0.665f, h2, 1.0f, 1.0f);   // Side sub window 0
@@ -560,13 +561,13 @@ void UIEngine::Initialise(int & argc, char** argv, ImageSourceEngine *imageSourc
 	if (deviceType == ITMLibSettings::DEVICE_CUDA) allocateGPU = true;
 
 	for (int w = 0; w < NUM_WIN; w++)
-		outImage[w] = new ITMUChar4Image(imageSource->getDepthImageSize(), true, allocateGPU);
+		outImage[w] = new ITMUChar4Image(imageSource->getDepthCameraParams().imgSize, true, allocateGPU);
 
-	inputRGBImage = new ITMUChar4Image(imageSource->getRGBImageSize(), true, allocateGPU);
-	inputRawDepthImage = new ITMShortImage(imageSource->getDepthImageSize(), true, allocateGPU);
+	inputRGBImage = new ITMUChar4Image(imageSource->getRGBCameraParams().imgSize, true, allocateGPU);
+	inputRawDepthImage = new ITMShortImage (imageSource->getDepthCameraParams().imgSize, true, allocateGPU);
 	inputIMUMeasurement = new ITMIMUMeasurement();
 
-	saveImage = new ITMUChar4Image(imageSource->getDepthImageSize(), true, false);
+	saveImage = new ITMUChar4Image(imageSource->getDepthCameraParams().imgSize, true, false);
 
 	outImageType[0] = ITMMainEngine::InfiniTAM_IMAGE_SCENERAYCAST;
 	outImageType[1] = ITMMainEngine::InfiniTAM_IMAGE_ORIGINAL_DEPTH;
@@ -608,8 +609,30 @@ void UIEngine::GetScreenshot(ITMUChar4Image *dest) const
 
 void UIEngine::ProcessFrame()
 {
-	if (!imageSource->hasMoreImages()) return;
-	imageSource->getImages(inputRGBImage, inputRawDepthImage);
+    auto idx = imageSource->Next();
+    if(idx<0)return;
+    if(skipFrmae>0) {
+        while(idx % skipFrmae != 0){
+            idx = imageSource->Next();
+            if(idx<0)return;
+        }
+//        if (idx % skipFrmae != 0) {
+//
+//        }
+    }
+//	if (!imageSource->hasMoreImages()) return;
+    imageSource->getDepth(idx, inputRawDepthImage);
+    imageSource->getColor(idx, inputRGBImage);
+    if(imageSource->getPose(idx, &m_pose)<0)
+        printf("cannot find pose information at index %d\n", idx);
+
+    //ORUtils::Image2CVShow::show(inputRGBImage);
+//    if(skipFrmae>0){
+//        if(idx % skipFrmae != 0){
+//            inputRGBImage->Clear(0);
+//        }
+//    }
+
 
 	if (imuSource != NULL) {
 		if (!imuSource->hasMoreMeasurements()) return;
@@ -628,22 +651,48 @@ void UIEngine::ProcessFrame()
 			SaveImageToFile(inputRGBImage, str);
 		}
 	}
-	if ((rgbVideoWriter != NULL) && (inputRGBImage->noDims.x != 0)) {
-		if (!rgbVideoWriter->isOpen()) rgbVideoWriter->open("out_rgb.avi", inputRGBImage->noDims.x, inputRGBImage->noDims.y, false, 30);
-		rgbVideoWriter->writeFrame(inputRGBImage);
-	}
-	if ((depthVideoWriter != NULL) && (inputRawDepthImage->noDims.x != 0)) {
-		if (!depthVideoWriter->isOpen()) depthVideoWriter->open("out_d.avi", inputRawDepthImage->noDims.x, inputRawDepthImage->noDims.y, true, 30);
-		depthVideoWriter->writeFrame(inputRawDepthImage);
-	}
 
 	sdkResetTimer(&timer_instant);
 	sdkStartTimer(&timer_instant); sdkStartTimer(&timer_average);
 
+	// Render Image
+    std::stringstream fileName;
+    fileName << std::setfill('0') << std::setw(8) << idx;
+
+    auto SaveImageWithMask=[&](const std::string &output_name){
+        UIEngine *uiEngine = UIEngine::Instance();
+        ORUtils::SE3Pose pose_;
+        ORUtils::Matrix4<float> pose_inv_;
+        m_pose.inv(pose_inv_);
+        pose_.SetM(pose_inv_);
+        ITMUChar4Image tmp(uiEngine->freeviewIntrinsics.imgSize,true,false);
+        mainEngine->GetImage(&tmp, ITMLib::ITMMainEngine::GetImageType::InfiniTAM_IMAGE_FREECAMERA_COLOUR_FROM_VOLUME,
+                             &pose_, &uiEngine->freeviewIntrinsics);
+
+        auto mat = ORUtils::Image2CvMat::get(&tmp);
+        cv::imshow(output_name, mat);
+
+        cv::imwrite(output_name + "_" +fileName.str() +".png", mat);
+
+        // get mask
+        cv::Mat mask;
+        cv::inRange(mat, cv::Scalar(0, 0, 0, 0), cv::Scalar(0, 0, 0, 0), mask);
+        cv::imshow(output_name+"_mask", mask);
+
+        cv::imwrite(output_name + "mask_" +fileName.str() +".png", mask);
+    };
+
+    auto inputrgb = ORUtils::Image2CvMat::get(inputRGBImage);
+    cv::imwrite("gt" +fileName.str() +".png",inputrgb);
+    SaveImageWithMask("before");
+
 	ITMTrackingState::TrackingResult trackerResult;
 	//actual processing on the mailEngine
-	if (imuSource != NULL) trackerResult = mainEngine->ProcessFrame(inputRGBImage, inputRawDepthImage, inputIMUMeasurement);
-	else trackerResult = mainEngine->ProcessFrame(inputRGBImage, inputRawDepthImage);
+	if (imuSource != NULL) trackerResult = mainEngine->ProcessFrame(inputRGBImage, inputRawDepthImage, &m_pose, inputIMUMeasurement);
+	else trackerResult = mainEngine->ProcessFrame(inputRGBImage, inputRawDepthImage, &m_pose);
+
+    SaveImageWithMask("after");
+    cv::waitKey(33);
 
 	trackingResult = (int)trackerResult;
 

@@ -66,6 +66,19 @@ namespace ITMLib
 			projectionParamsSimple.all.w = cy;
 		}
 
+        void SetFrom(float fx, float fy, float cx, float cy)
+        {
+            projectionParamsSimple.fx = fx;
+            projectionParamsSimple.fy = fy;
+            projectionParamsSimple.px = cx;
+            projectionParamsSimple.py = cy;
+
+            projectionParamsSimple.all.x = fx;
+            projectionParamsSimple.all.y = fy;
+            projectionParamsSimple.all.z = cx;
+            projectionParamsSimple.all.w = cy;
+        }
+
 		/**
 		 * @brief Returns true if the two focal lengths have a different sign.
 		 *

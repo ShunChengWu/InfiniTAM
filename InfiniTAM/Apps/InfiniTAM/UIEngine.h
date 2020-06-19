@@ -3,6 +3,7 @@
 #pragma once
 
 #include "../../InputSource/ImageSourceEngine.h"
+#include <ImageLoader/ImageLoader.hpp>
 #include "../../InputSource/IMUSourceEngine.h"
 #include "../../InputSource/FFMPEGWriter.h"
 #include "../../ITMLib/Core/ITMMainEngine.h"
@@ -35,7 +36,7 @@ namespace InfiniTAM
 			std::vector<UIColourMode> colourModes_main, colourModes_freeview;
 			int currentColourMode;
 
-			InputSource::ImageSourceEngine *imageSource;
+			SCSLAM::IO::ImageLoader *imageSource;
 			InputSource::IMUSourceEngine *imuSource;
 			ITMLib::ITMLibSettings internalSettings;
 			ITMLib::ITMMainEngine *mainEngine;
@@ -66,6 +67,9 @@ namespace InfiniTAM
 			int currentFrameNo; bool isRecording;
 			InputSource::FFMPEGWriter *rgbVideoWriter;
 			InputSource::FFMPEGWriter *depthVideoWriter;
+            ORUtils::Matrix4<float> m_pose;
+
+
 		public:
 			static UIEngine* Instance(void) {
 				if (instance == NULL) instance = new UIEngine();
@@ -89,7 +93,7 @@ namespace InfiniTAM
 			bool needsRefresh;
 			ITMUChar4Image *saveImage;
 
-			void Initialise(int & argc, char** argv, InputSource::ImageSourceEngine *imageSource, InputSource::IMUSourceEngine *imuSource,
+			void Initialise(int & argc, char** argv, SCSLAM::IO::ImageLoader *imageSource, InputSource::IMUSourceEngine *imuSource,
 				ITMLib::ITMMainEngine *mainEngine, const char *outFolder, ITMLib::ITMLibSettings::DeviceType deviceType);
 			void Shutdown();
 
@@ -98,6 +102,8 @@ namespace InfiniTAM
 			
 			void GetScreenshot(ITMUChar4Image *dest) const;
 			void SaveScreenshot(const char *filename) const;
+
+            int skipFrmae=-1;
 		};
 	}
 }

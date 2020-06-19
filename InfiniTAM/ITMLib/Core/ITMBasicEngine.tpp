@@ -242,7 +242,8 @@ static void QuaternionFromRotationMatrix(const double *matrix, double *q) {
 #endif
 
 template <typename TVoxel, typename TIndex>
-ITMTrackingState::TrackingResult ITMBasicEngine<TVoxel,TIndex>::ProcessFrame(ITMUChar4Image *rgbImage, ITMShortImage *rawDepthImage, ITMIMUMeasurement *imuMeasurement)
+ITMTrackingState::TrackingResult ITMBasicEngine<TVoxel,TIndex>::ProcessFrame(ITMUChar4Image *rgbImage, ITMShortImage *rawDepthImage,
+                                                                             ORUtils::Matrix4<float> *customPose, ITMIMUMeasurement *imuMeasurement)
 {
 	// prepare image and turn it into a depth image
 	if (imuMeasurement == NULL) viewBuilder->UpdateView(&view, rgbImage, rawDepthImage, settings->useBilateralFilter);
@@ -251,21 +252,32 @@ ITMTrackingState::TrackingResult ITMBasicEngine<TVoxel,TIndex>::ProcessFrame(ITM
 	if (!mainProcessingActive) return ITMTrackingState::TRACKING_FAILED;
 
 	// tracking
-	ORUtils::SE3Pose oldPose(*(trackingState->pose_d));
-	if (trackingActive) trackingController->Track(trackingState, view);
-
-	ITMTrackingState::TrackingResult trackerResult = ITMTrackingState::TRACKING_GOOD;
-	switch (settings->behaviourOnFailure) {
-	case ITMLibSettings::FAILUREMODE_RELOCALISE:
-		trackerResult = trackingState->trackerResult;
-		break;
-	case ITMLibSettings::FAILUREMODE_STOP_INTEGRATION:
-		if (trackingState->trackerResult != ITMTrackingState::TRACKING_FAILED)
-			trackerResult = trackingState->trackerResult;
-		else trackerResult = ITMTrackingState::TRACKING_POOR;
-		break;
-	default:
-		break;
+    ITMTrackingState::TrackingResult trackerResult = ITMTrackingState::TRACKING_GOOD;
+	if(customPose)
+    {
+//	    printf("move\n");
+	    ORUtils::Matrix4<float> pose_inv;
+        customPose->inv(pose_inv);
+//        std::cout << *customPose << "\n";
+//        std::cout << pose_inv << "\n";
+        trackingState->pose_d->SetM(pose_inv);
+        trackerResult = ITMLib::ITMTrackingState::TRACKING_GOOD;
+    }
+    ORUtils::SE3Pose oldPose(*(trackingState->pose_d));
+    if(!customPose) {
+        if (trackingActive) trackingController->Track(trackingState, view);
+        switch (settings->behaviourOnFailure) {
+            case ITMLibSettings::FAILUREMODE_RELOCALISE:
+                trackerResult = trackingState->trackerResult;
+                break;
+            case ITMLibSettings::FAILUREMODE_STOP_INTEGRATION:
+                if (trackingState->trackerResult != ITMTrackingState::TRACKING_FAILED)
+                    trackerResult = trackingState->trackerResult;
+                else trackerResult = ITMTrackingState::TRACKING_POOR;
+                break;
+            default:
+                break;
+        }
 	}
 
 	//relocalisation
