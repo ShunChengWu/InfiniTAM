@@ -199,11 +199,11 @@ int ImageSequence::getColor(int idx, ORUtils::Image<ORUtils::Vector3<uchar>> *co
     for (int r = 0; r < paramColor.imgSize.height; ++r)
         for (int c = 0; c < paramColor.imgSize.width; ++c) {
             colorptr->GetData(MEMORYDEVICE_CPU)[r * paramColor.imgSize.width + c].x =
-                    (color_mat.at<uchar3>(r, c)).x;
+                    color_mat.at<cv::Vec3b>(r, c)[0];
             colorptr->GetData(MEMORYDEVICE_CPU)[r * paramColor.imgSize.width + c].y =
-                    (color_mat.at<uchar3>(r, c)).y;
+                    color_mat.at<cv::Vec3b>(r, c)[1];
             colorptr->GetData(MEMORYDEVICE_CPU)[r * paramColor.imgSize.width + c].z =
-                    (color_mat.at<uchar3>(r, c)).z;
+                    color_mat.at<cv::Vec3b>(r, c)[2];
         }
     return 1;
 }
@@ -224,11 +224,11 @@ int ImageSequence::getColor(int idx, ORUtils::Image<ORUtils::Vector4<uchar>> *co
     for (int r = 0; r < paramColor.imgSize.height; ++r)
         for (int c = 0; c < paramColor.imgSize.width; ++c) {
             colorptr->GetData(MEMORYDEVICE_CPU)[r * paramColor.imgSize.width + c].x =
-                    (color_mat.at<uchar3>(r, c)).x;
+                    color_mat.at<cv::Vec3b>(r, c)[0];
             colorptr->GetData(MEMORYDEVICE_CPU)[r * paramColor.imgSize.width + c].y =
-                    (color_mat.at<uchar3>(r, c)).y;
+                    color_mat.at<cv::Vec3b>(r, c)[1];
             colorptr->GetData(MEMORYDEVICE_CPU)[r * paramColor.imgSize.width + c].z =
-                    (color_mat.at<uchar3>(r, c)).z;
+                    color_mat.at<cv::Vec3b>(r, c)[2];
             colorptr->GetData(MEMORYDEVICE_CPU)[r * paramColor.imgSize.width + c].w = 255;
         }
     return 1;
